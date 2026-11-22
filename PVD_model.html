@@ -1,0 +1,123 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>PVD thin-film model</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#fff;--fg:#222b33;--mut:#5b6b7a;--card:#e8eff2;--line:#c9d6da;--cv:#f6f9fa;--acc:#16334f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10181e;--fg:#e6edf1;--mut:#9fb0bb;--card:#1b2830;--line:#33454f;--cv:#0c1317}}
+:root[data-theme="dark"]{--bg:#10181e;--fg:#e6edf1;--mut:#9fb0bb;--card:#1b2830;--line:#33454f;--cv:#0c1317}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 Calibri,Arial,sans-serif}
+main{max-width:640px;margin:0 auto;padding:14px 14px 28px}
+h1{font:700 22px Cambria,Georgia,serif;margin:4px 0 2px}h1 span{color:var(--acc)}
+p.sub{margin:0 0 10px;color:var(--mut);font-size:14px}
+canvas{display:block;width:100%;max-width:100%;aspect-ratio:140/150;background:var(--cv);border:1px solid var(--line);border-radius:8px;image-rendering:pixelated}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+button,select{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+button.p{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
+.stat{background:var(--card);border-radius:8px;padding:8px 10px}.stat b{display:block;font-size:19px;color:var(--acc)}.stat small{color:var(--mut)}
+.ctl{background:var(--card);border-radius:8px;padding:8px 10px;margin:8px 0}
+.ctl label{display:flex;justify-content:space-between;font-weight:700;font-size:14px;margin-bottom:4px}
+.ctl input[type=range]{width:100%;accent-color:var(--acc)}.ctl select{width:100%}
+.note{font-size:13px;color:var(--mut);margin-top:12px}
+.msg{font-weight:700;color:var(--acc);min-height:22px}
+</style></head><body><main><p style="margin:0 0 6px;font-size:14px"><a href="./" style="color:var(--acc)">&larr; All models</a></p>
+<h1><span>PVD</span> model: atom by atom</h1>
+<p class="sub">Atoms leave a source and fly in straight lines (line-of-sight) to the substrate. Watch the top grow thick while the trench sidewalls stay thin.</p>
+<canvas id="cv"></canvas>
+<div class="msg" id="msg"></div>
+<div class="row"><button class="p" id="run">Pause</button><button id="rst">Reset</button><select id="spd" aria-label="Speed"><option value="1">Speed ×1</option><option value="2">Speed ×2</option><option value="4" selected>Speed ×4</option></select></div>
+<div class="stats" id="stats"></div>
+<div id="ctls"></div>
+<p class="note">Navy atoms are physically ejected or evaporated from the source; no chemical reaction is needed. Raise the angular spread or pressure to scatter more atoms into the trench; raise surface mobility to let atoms settle into a denser film. Sources: Mattox (2010); Ohring (2002); Thornton & Hoffman (1989). Illustrative 2D cross-section: 1 cell ≈ 1 nm. Not a quantitative process simulator.</p>
+</main>
+<script>
+const MODE='PVD';
+const W=140,H=150,S=4,tw=20,tx0=60,tx1=80,baseY=138;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');cv.width=W*S;cv.height=H*S;
+const off=document.createElement('canvas');off.width=W;off.height=H;const oc=off.getContext('2d');
+const rnd=Math.random;
+const CT={
+PVD:[{id:'mat',l:'Source material',o:['Al','Cu','Au','Ti','SiO₂']},{id:'meth',l:'Method',o:['Evaporation','Sputtering']},{id:'flux',l:'Atom flux (atoms per frame)',a:1,b:10,v:5},{id:'spread',l:'Angular spread of atoms (°)',a:0,b:45,v:10},{id:'press',l:'Chamber pressure (gas scattering)',a:1,b:10,v:2},{id:'mob',l:'Surface mobility (substrate temperature)',a:0,b:10,v:3},{id:'ar',l:'Trench aspect ratio (depth ÷ width)',a:.5,b:4,s:.5,v:2}],
+CVD:[{id:'prec',l:'Precursor → film',o:['SiH₄ → Si','TEOS → SiO₂','WF₆ + H₂ → W','TMGa + NH₃ → GaN']},{id:'temp',l:'Substrate temperature (°C)',a:200,b:1000,s:25,v:600},{id:'flux',l:'Precursor flow',a:1,b:10,v:5},{id:'carr',l:'Inert carrier gas (%)',a:0,b:90,s:10,v:30},{id:'press',l:'Chamber pressure (collisions)',a:1,b:10,v:3},{id:'ar',l:'Trench aspect ratio (depth ÷ width)',a:.5,b:4,s:.5,v:2}],
+ALD:[{id:'chem',l:'Chemistry (A + B → film)',o:['TMA + H₂O → Al₂O₃','TiCl₄ + NH₃ → TiN','DEZ + H₂O → ZnO','TEMAH + H₂O → HfO₂']},{id:'mode',l:'Co-reactant step',o:['Thermal','Plasma radicals']},{id:'tA',l:'Pulse A time (s)',a:.1,b:1,s:.05,v:.8},{id:'tB',l:'Pulse B time (s)',a:.1,b:1,s:.05,v:.8},{id:'tP',l:'Purge time (s)',a:.1,b:1,s:.05,v:.4},{id:'cyc',l:'Number of cycles',a:1,b:30,v:10},{id:'temp',l:'Substrate temperature (°C)',a:25,b:450,s:5,v:200},{id:'ar',l:'Trench aspect ratio (depth ÷ width)',a:.5,b:4,s:.5,v:1.5}]}[MODE];
+const MAT={'Al':'#3b8fd9','Cu':'#d9822b','Au':'#e0b422','Ti':'#7a5fd0','SiO₂':'#2fb5a0'};
+const PRE={'SiH₄ → Si':['#7a5fd0',.15,.8,'H₂'],'TEOS → SiO₂':['#2fb5a0',.06,1.2,'ethanol, ethene'],'WF₆ + H₂ → W':['#d9822b',.1,.9,'HF'],'TMGa + NH₃ → GaN':['#3b8fd9',.15,1.0,'CH₄']};
+const CH={'TMA + H₂O → Al₂O₃':[.11,'#1f7f8a'],'TiCl₄ + NH₃ → TiN':[.04,'#b5833b'],'DEZ + H₂O → ZnO':[.2,'#5a8f3c'],'TEMAH + H₂O → HfO₂':[.1,'#8a5fb0']};
+const P={};let cells,st,parts,depth,topY,run=true,speed=4,ph,pn,cyc,done,tick=0;
+const ui=document.getElementById('ctls');
+CT.forEach(c=>{const d=document.createElement('div');d.className='ctl';let h=`<label for="${c.id}">${c.l}<output id="o_${c.id}"></output></label>`;
+ if(c.o)h+=`<select id="${c.id}">${c.o.map(o=>`<option>${o}</option>`).join('')}</select>`;
+ else h+=`<input type="range" id="${c.id}" min="${c.a}" max="${c.b}" step="${c.s||1}" value="${c.v}">`;
+ d.innerHTML=h;ui.appendChild(d);const e=d.querySelector('#'+c.id);
+ const upd=()=>{P[c.id]=c.o?e.value:+e.value;d.querySelector('output').textContent=c.o?'':P[c.id];if(['ar','mat','prec','chem','mode','meth'].includes(c.id)&&cells)reset()};
+ e.addEventListener('input',upd);upd()});
+function reset(){depth=Math.min(80,Math.round(P.ar*tw));topY=baseY-depth;cells=new Uint8Array(W*H);st=new Uint8Array(W*H);parts=[];ph=0;pn=0;cyc=0;done=false;run=true;document.getElementById('run').textContent='Pause';
+ for(let y=topY;y<H;y++)for(let x=0;x<W;x++)if(y>=baseY||x<tx0||x>=tx1)cells[y*W+x]=1}
+reset();
+function dir(){const a=rnd()*6.2832;return[Math.cos(a),Math.sin(a)]}
+function addF(x,y,v){cells[y*W+x]=v;st[y*W+x]=0}
+function fcol(){return MODE=='ALD'?2+(cyc%2):2}
+function kT(){const T=P.temp+273;return T}
+function sCVD(){const p=PRE[P.prec];return Math.min(1,p[1]*Math.exp(-p[2]/8.617e-5*(1/kT()-1/873)))}
+function win(){const pl=P.mode!='Thermal',lo=pl?25:150,hi=pl?250:350,T=P.temp;return{lo,hi,r:T>=lo?1:Math.max(.05,1-(lo-T)/lo),pd:T>hi?Math.min(.3,(T-hi)/600):0,pl}}
+function spawn(k){let x=rnd()*W,y=.5,vx,vy;
+ if(MODE=='PVD'){const sp=(+P.spread+(P.meth=='Sputtering'?8:2))*Math.PI/180,t=(rnd()+rnd()+rnd()-1.5)/1.5*sp;vx=Math.sin(t);vy=Math.cos(t)}
+ else{[vx,vy]=dir();if(vy<0)vy=-vy}
+ if(parts.length<1200)parts.push({x,y,vx,vy,k})}
+function hit(p,cx,cy,qx,qy){
+ if(MODE=='PVD'){addF(qx,qy,2);let m=(P.mob/10)*(P.meth=='Sputtering'?1:.6);for(let i=0;i<4&&rnd()<m;i++){let ok=0;for(const dx of [0,rnd()<.5?-1:1,0,-1,1]){const nx=(qx+dx+W)%W,ny=qy+1;if(ny<H&&!cells[ny*W+nx]){cells[qy*W+qx]=0;qx=nx;qy=ny;cells[qy*W+qx]=2;ok=1;break}}if(!ok)break}return 1}
+ if(MODE=='CVD'){if(p.k=='i')return 0;if(rnd()<sCVD()){addF(qx,qy,2);if(parts.length<1200)parts.push({x:qx+.5,y:qy+.5,vx:(rnd()-.5)*.4,vy:-1,k:'p'});return 1}return 0}
+ const i=cy*W+cx,w=win();
+ if(p.k=='a'){if(st[i]==0&&rnd()<w.r){if(rnd()<w.pd){addF(qx,qy,fcol());return 1}st[i]=1;return 1}return 0}
+ if(p.k=='b'){if(st[i]==1){if(rnd()<w.r){addF(qx,qy,fcol());st[i]=2;return 1}return 0}if(w.pl&&rnd()<.25)return 1}
+ return 0}
+function move(p){const PS=.003*(P.press||3);
+ for(let n=0;n<4;n++){
+  if(p.k=='p'){p.x+=p.vx*.75;p.y+=p.vy*.75;if(p.y<0)return 0;continue}
+  if(MODE!='PVD'&&rnd()<(MODE=='CVD'?.002:.001))return 0;let nx=p.x+p.vx*.75,ny=p.y+p.vy*.75;if(nx<0)nx+=W;if(nx>=W)nx-=W;if(ny<0)return 0;if(ny>=H)ny=H-.01;
+  const cx=nx|0,cy=ny|0;
+  if(cells[cy*W+cx]){if(hit(p,cx,cy,p.x|0,p.y|0))return 0;
+   const a=Math.atan2(p.y-(cy+.5),p.x-(cx+.5))+(rnd()-.5)*3.1;p.vx=Math.cos(a);p.vy=Math.sin(a);continue}
+  p.x=nx;p.y=ny;if(rnd()<PS){if(MODE=='PVD'){const a=Math.atan2(p.vy,p.vx)+(rnd()-.5)*1.2;p.vx=Math.cos(a);p.vy=Math.abs(Math.sin(a))}else[p.vx,p.vy]=dir()}}
+ return 1}
+function step(){
+ if(MODE=='PVD')for(let i=0;i<P.flux*2;i++)spawn('a');
+ else if(MODE=='CVD')for(let i=0;i<P.flux*4;i++)spawn(rnd()*100<P.carr?'i':'a');
+ else if(!done){const d=[P.tA,P.tB,P.tP,P.tP].map(t=>t*100),o=[0,2,1,3];
+  const dd=[P.tA*100,P.tP*100,P.tB*100,P.tP*100];
+  if(ph==0||ph==2)for(let i=0;i<40;i++)spawn(ph==0?'a':'b');
+  else for(const q of parts)if(rnd()<.05)q.k='p',q.vx=0,q.vy=-1.2;
+  if(++pn>=dd[ph]){pn=0;ph=(ph+1)%4;if(ph==0){cyc++;if(cyc>=P.cyc){done=true}}}}
+ parts=parts.filter(move)}
+function meas(){const f=(x,y)=>cells[y*W+x]>=2;let top=0,sd=0,fl=0;
+ for(let y=topY-1;y>=0;y--)if(f(30,y))top++;
+ const ym=topY+(depth>>1);for(let x=tx0;x<tx1;x++)if(f(x,ym))sd++;
+ for(let y=baseY-1;y>=topY;y--)if(f(70,y))fl++;
+ let pin=true;for(let x=tx0;x<tx1;x++)if(!f(x,topY))pin=false;
+ return{top,sd,fl,pin}}
+const SD=document.getElementById('stats'),MS=document.getElementById('msg');
+const UNIT=MODE=='ALD'?'one atomic layer':'1 nm';
+function ui2(){const m=meas();let a=[];const g=CH[P.chem]&&CH[P.chem][0];
+ const f=v=>MODE=='ALD'?(v+' layers ≈ '+(v*g).toFixed(1)+' nm'):v+' nm';
+ a.push(['Top film',f(m.top)],['Sidewall (mid-depth)',f(m.sd)],['Trench floor',f(m.fl)],['Step coverage (floor ÷ top)',m.top?Math.round(m.fl/m.top*100)+' %':'–']);
+ if(MODE=='CVD')a.push(['Surface reaction probability',sCVD().toFixed(3)],['By-product',PRE[P.prec][3]]);
+ if(MODE=='PVD')a.push(['Total angular spread','±'+(+P.spread+(P.meth=='Sputtering'?8:2))+'°'],['Film packing',(P.mob<4?'porous, columnar':'denser')]);
+ if(MODE=='ALD'){const w=win();a.push(['Cycle',Math.min(cyc,P.cyc)+' / '+P.cyc],['Nominal thickness (cycles × growth)',(P.cyc*g).toFixed(1)+' nm']);
+  MS.textContent=done?'Done: '+cyc+' cycles':['A pulse','Purge','B pulse','Purge'][ph]+' · cycle '+(cyc+1);
+  const T=P.temp;if(T<w.lo)MS.textContent+=' — too cold: slow surface reaction';else if(T>w.hi)MS.textContent+=' — too hot: precursor decomposes (CVD-like growth)';}
+ else MS.textContent=m.pin?'Trench mouth closed: void trapped inside':'';
+ SD.innerHTML=a.map(x=>`<div class="stat"><small>${x[0]}</small><b>${x[1]}</b></div>`).join('')}
+function draw(){const im=oc.createImageData(W,H),d=im.data;
+ const fc=MODE=='PVD'?MAT[P.mat]:MODE=='CVD'?PRE[P.prec][0]:CH[P.chem][1];
+ const hx=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+ const cl={1:[138,151,163],2:hx(fc),3:hx(fc).map(v=>Math.min(255,v+70)),s:[8,40,45]};
+ for(let i=0;i<W*H;i++){const c=cells[i];if(!c)continue;const k=(MODE=='ALD'&&st[i]==1)?cl.s:cl[c];d[i*4]=k[0];d[i*4+1]=k[1];d[i*4+2]=k[2];d[i*4+3]=255}
+ oc.putImageData(im,0,0);ctx.clearRect(0,0,W*S,H*S);ctx.imageSmoothingEnabled=false;ctx.drawImage(off,0,0,W*S,H*S);
+ for(const p of parts){ctx.fillStyle=p.k=='i'?'#9bb7c9':p.k=='p'?'#9aa8b3':(MODE=='ALD'&&p.k=='b'?'#b5443b':MODE=='ALD'?'#16334f':fc);ctx.beginPath();ctx.arc(p.x*S,p.y*S,p.k=='a'||p.k=='b'?2.6:2,0,6.3);ctx.fill()}}
+function loop(){if(run)for(let i=0;i<speed;i++){step();tick++}
+ if(MODE!='ALD'&&run){const m=meas();if(m.top>topY-6){run=false;document.getElementById('run').textContent='Run'}}
+ draw();if(tick%6==0)ui2();requestAnimationFrame(loop)}
+document.getElementById('run').onclick=e=>{run=!run;e.target.textContent=run?'Pause':'Run'};
+document.getElementById('rst').onclick=reset;document.getElementById('spd').onchange=e=>speed=+e.target.value;
+loop();
+</script></body></html>

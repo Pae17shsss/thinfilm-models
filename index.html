@@ -1,0 +1,19 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Thin Film Interactive Models</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#fff;--fg:#222b33;--mut:#5b6b7a;--card:#e8eff2;--line:#c9d6da;--acc:#16334f}
+@media (prefers-color-scheme:dark){:root{--bg:#10181e;--fg:#e6edf1;--mut:#9fb0bb;--card:#1b2830;--line:#33454f;--acc:#7fb3e0}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 Calibri,Arial,sans-serif}
+main{max-width:640px;margin:0 auto;padding:24px 14px 32px}
+h1{font:700 24px Cambria,Georgia,serif;margin:0 0 4px}p.sub{margin:0 0 18px;color:var(--mut)}
+a.card{display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:10px 0}
+a.card:hover{border-color:var(--acc)}a.card b{font:700 19px Cambria,Georgia,serif;color:var(--acc)}a.card span{display:block;color:var(--mut);font-size:14px;margin-top:2px}
+.note{font-size:13px;color:var(--mut);margin-top:18px}
+</style></head><body><main>
+<h1>Thin Film Interactive Models</h1>
+<p class="sub">Three deposition methods, simulated atom by atom. Pick one to open.</p>
+<a class="card" href="PVD_model.html"><b>PVD</b> &mdash; Physical Vapor Deposition<span>Line-of-sight atoms: thick on top, thin on trench sidewalls.</span></a>
+<a class="card" href="CVD_model.html"><b>CVD</b> &mdash; Chemical Vapor Deposition<span>Gas-phase precursors react on the surface for better coverage.</span></a>
+<a class="card" href="ALD_model.html"><b>ALD</b> &mdash; Atomic Layer Deposition<span>Self-limiting cycles, one atomic layer at a time, fully conformal.</span></a>
+<p class="note">Illustrative 2D simulation, not a quantitative process simulator.</p>
+</main></body></html>
